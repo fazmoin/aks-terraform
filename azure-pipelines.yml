@@ -1,0 +1,51 @@
+trigger:
+- main
+
+resources:
+- repo: self
+
+variables:
+  dockerHubUsername: '<your-dockerhub-username>'
+  dockerHubPassword: $(dockerHubPassword)
+  imageName: 'flask-app'
+  aksClusterName: '<your-aks-cluster-name>'
+  aksResourceGroup: '<your-aks-resource-group>'
+  azureSubscription: '<your-azure-subscription>'
+
+stages:
+- stage: Build
+  jobs:  
+  - job: Build
+    displayName: Build image
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: Docker@2
+      inputs:
+        containerRegistry: |
+          $(dockerHubUsername)
+          $(dockerHubPassword)
+        repository: '$(dockerHubUsername)/$(imageName)'
+        command: 'buildAndPush'
+        Dockerfile: '**/Dockerfile'
+        tags: 'latest'
+
+- stage: Deploy
+  jobs:
+  - deployment: Deploy
+    displayName: Deploy to AKS
+    environment: 'production'
+    pool:
+      vmImage: 'ubuntu-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az aks get-credentials --resource-group $(aksResourceGroup) --name $(aksClusterName)
+                kubectl apply -f application-manifest.yaml
